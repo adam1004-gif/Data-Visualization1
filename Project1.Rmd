@@ -1,0 +1,246 @@
+---
+title: "Data Analysis using Density of Jakarta in 2013"
+author: "Farhan Adham Irawan"
+date: "27/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This session will discuss the geographic conditions of DKI Jakarta Province in 2013. Below are some of the libraries that we need
+
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(reshape2)
+library(readxl)
+```
+Download this data here
+[dataset](https://drive.google.com/file/d/1aU-1D-_2vS39Rl6eceeH1tvhcXcgW7fI/view?usp=sharing)
+
+
+# Data Exploratory
+
+## Data Input & Structure
+**input our data _dkikepadatankelurahan2013_**
+
+```{r message=FALSE}
+data <- read_excel("dkikepadatankelurahan2013.xlsx")
+```
+we can see type of data
+```{r}
+glimpse(data)
+```
+
+as we can see, there are some columns have missing value, now we're going to take care of it by removing that column
+```{r}
+data <- data %>%
+            select(-c(8:19))
+```
+Column 8 to Column 19 is an empty column, so we do the command to remove that column
+
+<br>
+
+After removing empty columns, we will make sure that there are no empty columns in the data
+```{r}
+colSums(is.na(data))
+```
+
+<br>
+
+## Data Manipulation
+we want change the data format to wide to long to make it easier to analyze
+
+```{r}
+data <- melt(data,
+        id.vars = names(data)[c(1:7)],
+        measure.vars = names(data)[c(8:25)],
+        variable.name = "kategori",
+        value.name = "TOTAL")
+head(data)
+```
+
+before separating the column **kategori**, we must see whether the dividers in the column are all same
+
+```{r}
+data.frame(kategori = unique(data$kategori), jumlah_character = nchar(as.character(unique(data$kategori))))
+```
+**>75 Laki-Laki & >75 Perempuan** have a different number of characters, this indicates that there are repeated spaces in the sentence.
+we can fix it using **_gsub_**
+```{r}
+data$kategori = gsub("[ ]{2,}"," ", data$kategori)
+```
+
+
+now we want to separare **kategori column** into two pieces
+```{r, warning=FALSE}
+data <- data %>%
+        separate(kategori, c("UMUR","JENIS KELAMIN"), sep = " ") 
+head(data)
+```
+<br>
+<br>
+<br>
+
+# Study Case
+
+**1) we want to know sums of _"JENIS KELAMIN"_ each of _"KABUPATEN/KOTA"_**
+
+```{r message=FALSE}
+data %>%
+    group_by(`NAMA KABUPATEN/KOTA`, `JENIS KELAMIN`) %>%
+    summarise(TOTAL = sum(TOTAL)) -> plot1
+head(plot1)
+```
+
+
+```{r message=FALSE}
+ggplot(data = plot1, aes(y = reorder(`NAMA KABUPATEN/KOTA`, TOTAL), 
+                         x = TOTAL, group = `JENIS KELAMIN`, 
+                         fill = `JENIS KELAMIN`)) + geom_bar(stat="identity", 
+         position = "dodge") + 
+labs(x = NULL, y = NULL, 
+     title = "Total Population of each District / City", fill = NULL) + 
+scale_fill_manual(values = c("#4d94ff","#ff4d94")) + 
+xlim(0,1250000) + 
+  theme_minimal() + 
+  theme(legend.position = "top",
+        plot.title = element_text(hjust = .5))
+```
+
+**Interpretation** <br>
+1) West Jakarta is the city with the highest population <br>
+2) There are always more men than women
+
+<br>
+
+**2) we want to know sum of area compared to sum of population to find out the population density there**
+
+```{r message=FALSE}
+data %>%
+    group_by(`NAMA KABUPATEN/KOTA`) %>%
+    summarise(large = sum(`LUAS WILAYAH (KM2)`), jumlah = sum(TOTAL)) -> plot2
+head(plot2)
+```
+
+
+```{r message=FALSE}
+ggplot(data = plot2, aes(x = `NAMA KABUPATEN/KOTA`)) +
+  geom_line(aes(y = jumlah, group= 1), 
+            linetype = 2, col = "blue") + 
+  geom_point(aes(y = jumlah, size = large, col = large)) + scale_color_gradient(low = "green", high = "red") +
+    labs(x = "", y = NULL, title = "The Density of the Area in The District / City",
+         subtitle = "The Redder the Wider of Area",
+         col = NULL) + theme_minimal() + 
+  theme(axis.text.x = element_text(size = 5.5))
+```
+
+**Interpretation** <br>
+1) East Jakarta is the most strategic place because the population is not too high but has a large area <br>
+2) West Jakarta is the most densely populated place because of the high population and the small area. This can indicate frequent congestion in the West Jakarta area
+
+<br>
+
+**3) We want to know Total Population in Age Category** <br>
+**_the plot below is very interactive_**
+
+```{r message=FALSE}
+data %>%
+    group_by(`NAMA KABUPATEN/KOTA`, UMUR) %>%
+    summarise(Jumlah = sum(TOTAL)) -> plot3
+head(plot3)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+    ggplot(data = plot3, 
+           aes(x = factor(UMUR, levels = c("35-39","40-44","45-49","50-54","55-59","60-64","65-69","70-74",">75")))) +  geom_line(aes(y = Jumlah, group = `NAMA KABUPATEN/KOTA`)) + 
+      facet_wrap(~`NAMA KABUPATEN/KOTA`) + 
+      labs(x = "", y = NULL, 
+           title = "Total population in age category", 
+           subtitle = "in units of hundreds of thousands of inhabitants") + theme_minimal() + theme(axis.text.x = element_text(angle = 90), plot.title = element_text(hjust = .5), plot.subtitle = element_text(hjust = .5)) -> plot3.y
+    
+    plotly::ggplotly(plot3.y, tooltip = "y")
+```
+
+**Interpretation** <br>
+1) West Jakarta and North Jakarta have the same pattern <br>
+2) Ages 50-54 are very much in the area of North Jakarta and West Jakarta <br>
+3) This indicates that the majority of West Jakarta and North Jakarta are not immigrants but are native Jakarta people <br>
+4) East Jakarta, Central Jakarta, South Jakarta have the same pattern, the indication is that there are more youth in the area than the elderly <br>
+5) The congestion in these 3 regions can be ascertained to be higher than in the other 3 regions
+
+<br>
+
+**4) We want to know the Density of Each Village** <br>
+**_the plot below is very interactive_**
+
+```{r message=FALSE}
+data %>%
+    group_by(`NAMA KELURAHAN`) %>%
+    summarise(wilayah = mean(`LUAS WILAYAH (KM2)`),
+              jiwa = sum(TOTAL),
+              Density = jiwa/wilayah) -> plot4
+head(plot4)
+```
+
+
+```{r}
+  ggplot(data = plot4, 
+         aes(x = jiwa, y = wilayah)) + 
+  geom_point(aes(size = Density, col = Density)) + scale_color_gradient(low = "green", high = "red") + 
+  labs(x = "", y = "", title = "The Population Density of Each Village", col = NULL) +
+    theme_minimal() + 
+  theme(plot.title = element_text(hjust = .5))
+```
+
+**Interpretation** <br>
+1) There are some areas that have high density marked with red areas <br>
+2) Overall population density in Jakarta was good in 2013
+
+<br>
+<br>
+
+# Final Conclusion
+1) From all the entire region, West Jakarta is the area with the highest density <br>
+2) Several businesses would be suitable to run in the West Jakarta area considering the large number of needs due to the large number of people <br>
+3) Some areas such as West Jakarta and North Jakarta are dominated by parents, meaning that most of them are not immigrants but are native Jakarta people
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
